@@ -103,34 +103,38 @@ class Server():
         return
     
     def pay_bill(self, client):
-        distribute = False
-        personal_bill = self.costumers.get_personal_bill(client)
-        table_bill = self.costumers.get_table_bill()
+    distribute = False
+    personal_bill = self.costumers.get_personal_bill(client)
+    table_bill = self.costumers.get_table_bill()
 
-        message = self.messages.get_pay_bill(personal_bill, table_bill)
-        if self.rdt_sender.is_waiting():
-            self.rdt_sender.send(message, self.addr)  # Envia "Sua conta foi ... e a da mesa ... digite o valor a ser pago"
+    message = self.messages.get_pay_bill(personal_bill, table_bill)
+    if self.rdt_sender.is_waiting():
+        self.rdt_sender.send(message, self.addr)  # Envia "Sua conta foi ... e a da mesa ... digite o valor a ser pago"
 
-        while True:
-            msg, self.addr = self.serverSock.recvfrom(BUFFER_SIZE)
-            seqnum, data, self.current_client = msg.decode().split(',')
-            self.rdt_receiver.receive(self.addr, seqnum)
-            
-            if float(data) > table_bill or float(data) < personal_bill:
-                if self.rdt_sender.is_waiting():
-                    self.rdt_sender.send(message, self.addr)
-            elif float(data) > personal_bill and float(data) <= table_bill:
-                message = "Você está pagando R$" + str(float(data) - personal_bill) + " a mais que sua conta\n"
-                if self.rdt_sender.is_waiting():
-                    self.rdt_sender.send(message, self.addr)
+    while True:
+        msg, self.addr = self.serverSock.recvfrom(BUFFER_SIZE)
+        seqnum, data, self.current_client = msg.decode().split(',')
+        self.rdt_receiver.receive(self.addr, seqnum)
 
-                message = "O valor excedente será distribuido para para os outros clientes."
-                distribute = True
-                if self.rdt_sender.is_waiting():
-                    self.rdt_sender.send(message, self.addr)
-                break
-            elif float(data) == personal_bill:
-                break
+        # Verifica se o valor informado pelo cliente é válido
+        if float(data) > table_bill or float(data) < personal_bill:
+            # Se o valor for inválido, envia novamente a mensagem pedindo para informar o valor correto
+            if self.rdt_sender.is_waiting():
+                self.rdt_sender.send(message, self.addr)
+        elif float(data) > personal_bill and float(data) <= table_bill:
+            # Se o valor informado for maior que o valor da conta pessoal e menor ou igual ao valor total da mesa,
+            # informa que o cliente está pagando um valor adicional e que o excedente será distribuído para os outros clientes
+            message = "Você está pagando R$" + str(float(data) - personal_bill) + " a mais que sua conta\n"
+            if self.rdt_sender.is_waiting():
+                self.rdt_sender.send(message, self.addr)
+
+            message = "O valor excedente será distribuido para para os outros clientes."
+            distribute = True
+            if self.rdt_sender.is_waiting():
+                self.rdt_sender.send(message, self.addr)
+            break
+        elif float(data) == personal_bill:     
+            break  # Se o valor informado for igual ao valor da conta pessoal, encerra a função
 
         message = "Deseja confirmar o pagamento? (sim ou não)"
         if self.rdt_sender.is_waiting():
